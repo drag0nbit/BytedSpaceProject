@@ -1,0 +1,51 @@
+Done:
+- Sprite loading
+- Locales loading
+
+In progress
+-
+
+Todo:
+- Modifiers (good, bad and unstable)
+- Main menu
+- Connecting to server
+- Logining via website using discord
+
+try: modernGL
+
+
+
+DP = Difficulty points
+At start you have 5 modifiers slots and 3 DP
+You can edit them at start of the game (when reset) or using in game currency
+Modifiers of the same type can't stack together. For example: x0.5 shield capacity and x1.8 shield capacity.
+You can put only one unstable modifier.
+Using upgrades you can increase modifier capacity to 8 and unstable modifier capacity to 3
+
+Negative modifiers: (increase DP)
+- x0.5 shield capacity (3 DP)
+- x0.5 health capacity (3 DP)
+- x0.6 move and rotation speed (3 DP)
+- x0.6 attack speed (3 DP)
+- x0.6 damage (3 DP)
+- x1.5 energy usage (2 DP)
+- x0.5 projectile speed (2 DP)
+- x1.5 heating (1 DP)
+- x0.7 laser width (1 DP)
+
+Unstable modifiers: (Free, max 1 but can be increased)
+- x2 damage gain and dealing
+- Not regenerating shield and regenerating health
+- Can't shoot while rotating and x1.5 movement speed
+- x3 heating, 1.5x overheat time and x1.5 attack speed
+
+Positive modifiers: (consume DP)
+- x1.8 shield capacity (3 DP)
+- x1.8 health capacity (3 DP)
+- x1.5 move and rotation speed (3 DP)
+- x1.5 attack speed (3 DP)
+- x1.5 damage (3 DP)
+- x0.5 energy usage (2 DP)
+- x1.5 projectile speed (2 DP)
+- x0.8 heating (1 DP)
+- x1.2 laser width (1 DP)
