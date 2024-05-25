@@ -1,10 +1,11 @@
 import math
-
 import pygame
 from pygame.locals import *
+import moderngl
 import os
 import json
 import numba
+from array import array
 
 
 @numba.njit(cache=True)
@@ -16,25 +17,156 @@ pygame.init()
 pygame.font.init()
 
 pygame.event.set_allowed([QUIT, KEYDOWN, KEYUP])
-window = pygame.display.set_mode((1200, 600), DOUBLEBUF)
+window = pygame.display.set_mode((1200, 600), DOUBLEBUF | OPENGL)
+display = pygame.Surface((1200, 600))
+ctx = moderngl.create_context()
 pygame.display.set_caption("Byted Space Project")
 font = pygame.font.SysFont('Comic Sans MS', 20)
 big_font = pygame.font.SysFont('Comic Sans MS', 32)
+
+quad_buffer = ctx.buffer(data=array('f', [
+    # position (x, y), uv coords (x, y)
+    -1.0, 1.0, 0.0, 0.0,  # topleft
+    1.0, 1.0, 1.0, 0.0,  # topright
+    -1.0, -1.0, 0.0, 1.0,  # bottomleft
+    1.0, -1.0, 1.0, 1.0,  # bottomright
+]))
+
+program = ctx.program(vertex_shader="""
+#version 330 core
+
+in vec2 vert;
+in vec2 texcoord;
+out vec2 uvs;
+
+void main() {
+    uvs = texcoord;
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+""", fragment_shader="""
+#version 330 core
+
+uniform sampler2D tex;
+
+in vec2 uvs;
+out vec4 f_color;
+
+void main() {
+    vec2 sample_pos = vec2(uvs.x, uvs.y);
+    f_color = vec4(texture(tex, sample_pos).rg, texture(tex, sample_pos).b * 1.5, 1.0);
+}
+""")
+bloom = ctx.program(vertex_shader="""
+#version 330 core
+
+in vec2 vert;
+in vec2 texcoord;
+out vec2 uvs;
+
+void main() {
+    uvs = texcoord;
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+""", fragment_shader="""
+#version 330 core
+
+uniform sampler2D tex;
+uniform float threshold; // Threshold to determine bright areas
+uniform float bloomIntensity; // Intensity of the bloom effect
+uniform float blurRadius; // Radius of the blur
+
+in vec2 uvs;
+out vec4 f_color;
+
+// Function to calculate Gaussian blur
+vec4 gaussianBlur(sampler2D image, vec2 uv, vec2 resolution, float radius) {
+    vec4 color = vec4(0.0);
+    float totalWeight = 0.0;
+
+    // Gaussian kernel
+    for (float x = -radius; x <= radius; x++) {
+        for (float y = -radius; y <= radius; y++) {
+            vec2 offset = vec2(x, y) / resolution;
+            float weight = exp(-(offset.x * offset.x + offset.y * offset.y) * 4.0 * radius);
+            color += texture(image, uv + offset) * weight;
+            totalWeight += weight;
+        }
+    }
+
+    return color / totalWeight;
+}
+
+void main() {
+    // Sample the original image
+    vec4 originalColor = texture(tex, uvs);
+    
+    // Calculate the luminance of the pixel
+    float luminance = (originalColor.r + originalColor.g + originalColor.b) / 3.0;
+    
+    // Check if the pixel is bright enough
+    if (luminance > threshold) {
+        // Apply bloom effect to bright pixels
+        vec4 bloomColor = gaussianBlur(tex, uvs, textureSize(tex, 0), blurRadius) * bloomIntensity;
+        
+        // Add the bloom color to the original color
+        f_color = originalColor + bloomColor;
+    } else {
+        // Otherwise, just output the original color
+        f_color = originalColor;
+    }
+}
+""")
+
+render_object = ctx.vertex_array(program, [(quad_buffer, '2f 2f', 'vert', 'texcoord')])
+render_bloom = ctx.vertex_array(bloom, [(quad_buffer, '2f 2f', 'vert', 'texcoord')])
+
+
+def surf_to_texture(surf):
+    tex = ctx.texture(surf.get_size(), 4)
+    tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    tex.swizzle = 'BGRA'
+    tex.write(surf.get_view('1'))
+    return tex
+
 
 # Base values ------------------------------------
 config = {
     "path": {
         "textures": "textures",
-        "locales": "locales"
+        "locales": "locales",
+        "settings": "settings.json"
     },
     "default_settings": {
         "lang": "en_us",
-        "video": {
-            "fps": 60,
-            "postprocessing": True,
-        }
+        "fps": 60,
+        "bloom": True,
+        "chromatic_aberration": True,
+        "anti_aliasing": True,
+        "other_distortion_effects": True,
+        "screen_shake": 1.0,
+        "music": 80,
+        "sound": 100
     }
 }
+
+
+def load_settings(path):
+    if os.path.exists(path):
+        with open(path, 'r') as file:
+            data = json.load(file)
+    else:
+        data = config["default_settings"]
+        with open(path, 'w') as file:
+            json.dump(data, file, indent=4)
+    return data
+
+
+def save_settings(data, path):
+    with open(path, 'w') as file:
+        json.dump(data, file, indent=4)
+
+
+settings = load_settings(config["path"]["settings"])
 
 tiles = {
     1: "tiles.",
@@ -395,8 +527,64 @@ class Menu:
                 "name": "menu.options",
                 0: {
                     "name": "menu.back",
-                    "action": "goto",
+                    "action": "goto&save",
                     "goto": "main"
+                },
+                1: {
+                    "name": "menu.options.music",
+                    "action": "edit",
+                    "min": 0,
+                    "max": 200,
+                    "step": 1,
+                    "target": "music"
+                },
+                2: {
+                    "name": "menu.options.sounds",
+                    "action": "edit",
+                    "min": 0,
+                    "max": 200,
+                    "step": 1,
+                    "target": "sounds"
+                },
+                3: {
+                    "name": "menu.options.language",
+                    "action": "language"
+                },
+                4: {
+                    "name": "menu.options.fps",
+                    "action": "edit",
+                    "min": 30,
+                    "max": 240,
+                    "step": 30,
+                    "target": "sounds"
+                },
+                5: {
+                    "name": "menu.options.bloom",
+                    "action": "switch",
+                    "target": "bloom"
+                },
+                6: {
+                    "name": "menu.options.chromatic_aberration",
+                    "action": "switch",
+                    "target": "chromatic_aberration"
+                },
+                7: {
+                    "name": "menu.options.anti_aliasing",
+                    "action": "switch",
+                    "target": "anti_aliasing"
+                },
+                8: {
+                    "name": "menu.options.other_distortion_effects",
+                    "action": "switch",
+                    "target": "other_distortion_effects"
+                },
+                9: {
+                    "name": "menu.options.screen_shake",
+                    "action": "edit",
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.1,
+                    "target": "screen_shake"
                 }
             },
             "play": {
@@ -405,6 +593,10 @@ class Menu:
                     "name": "menu.back",
                     "action": "goto",
                     "goto": "main"
+                },
+                1: {
+                    "name": "menu.play.connect",
+                    "action": "-"
                 }
             }
         }
@@ -416,17 +608,32 @@ class Menu:
         self.dynamic_cursor_y = linear_interpolation(self.dynamic_cursor_y, self.selected * 30 + 58, 0.1)
 
     def render(self, x, y):
-        window.blit(self.pointer_texture, (x + (math.sin(self.sin_i) * 5), y + self.dynamic_cursor_y))
+        display.blit(self.pointer_texture, (x + (math.sin(self.sin_i) * 5), y + self.dynamic_cursor_y))
         for i in range(len(self.menus[self.current_menu]) - 1):
             c = (255, 255, 255)
             if i == self.selected:
                 c = (255, 255, 0)
-            window.blit(font.render(get_translated("ru_ru", self.menus[self.current_menu][i]["name"]), True, c),
-                        (x + 30, y + 50 + (i * 30)))
+            display.blit(
+                font.render(get_translated(settings["lang"], self.menus[self.current_menu][i]["name"]),
+                            settings["anti_aliasing"], c), (x + 30, y + 50 + (i * 30)))
+            if self.menus[self.current_menu][i]["action"] in ("edit", "switch", "language"):
+                display.blit(font.render("<", settings["anti_aliasing"], c), (x + 500, y + 50 + (i * 30)))
+                display.blit(font.render(">", settings["anti_aliasing"], c), (x + 700, y + 50 + (i * 30)))
+                if self.menus[self.current_menu][i]["action"] == "language":
+                    text_width, text_height = font.size(get_translated(settings["lang"], "__name__"))
+                    display.blit(
+                        font.render(get_translated(settings["lang"], "__name__"), settings["anti_aliasing"], c),
+                        (x + 600 - (text_width / 2), y + 50 + (i * 30)))
+                if self.menus[self.current_menu][i]["action"] == "switch":
+                    a = {True: "menu.enabled", False: "menu.disabled"}[
+                        settings[self.menus[self.current_menu][i]["target"]]]
+                    text_width, text_height = font.size(get_translated(settings["lang"], a))
+                    display.blit(font.render(get_translated(settings["lang"], a), settings["anti_aliasing"], c),
+                                 (x + 600 - (text_width / 2), y + 50 + (i * 30)))
         if self.menus[self.current_menu]["name"] is not None:
-            window.blit(
-                big_font.render(get_translated("ru_ru", self.menus[self.current_menu]["name"]), True, (255, 255, 255)),
-                (x, y))
+            display.blit(
+                big_font.render(get_translated(settings["lang"], self.menus[self.current_menu]["name"]),
+                                settings["anti_aliasing"], (255, 255, 255)), (x, y))
 
     def up(self):
         self.selected -= 1
@@ -443,21 +650,37 @@ class Menu:
         if self.menus[self.current_menu][self.selected]["action"] == "goto":
             self.current_menu = self.menus[self.current_menu][self.selected]["goto"]
             self.selected = 0
+        elif self.menus[self.current_menu][self.selected]["action"] == "goto&save":
+            self.current_menu = self.menus[self.current_menu][self.selected]["goto"]
+            save_settings(settings, config["path"]["settings"])
+            self.selected = 0
         elif self.menus[self.current_menu][self.selected]["action"] == "quit":
             running = False
 
     def next(self):
-        pass
+        global settings
+        if self.menus[self.current_menu][self.selected]["action"] == "language":
+            i = list(locales.keys()).index(settings["lang"]) + 1
+            if i > len(locales) - 1:
+                i = 0
+            settings["lang"] = list(locales.keys())[i]
+        elif self.menus[self.current_menu][self.selected]["action"] == "switch":
+            settings[self.menus[self.current_menu][self.selected]["target"]] = not settings[
+                self.menus[self.current_menu][self.selected]["target"]]
 
     def previous(self):
-        pass
+        global settings
+        if self.menus[self.current_menu][self.selected]["action"] == "language":
+            settings["lang"] = list(locales.keys())[list(locales.keys()).index(settings["lang"]) - 1]
+        elif self.menus[self.current_menu][self.selected]["action"] == "switch":
+            settings[self.menus[self.current_menu][self.selected]["target"]] = not settings[
+                self.menus[self.current_menu][self.selected]["target"]]
 
 
 # Init ------------------------------------
 clock = pygame.time.Clock()
 screen = "menu"
 menu = Menu()
-
 if __name__ == "__main__":
     running = True
     while running:
@@ -469,15 +692,30 @@ if __name__ == "__main__":
                     menu.up()
                 elif event.key == K_s:
                     menu.down()
+                elif event.key == K_a:
+                    menu.previous()
+                elif event.key == K_d:
+                    menu.next()
                 elif event.key == K_RETURN:
                     menu.apply()
         if screen == "menu":
             menu.update()
-        window.fill((0, 0, 0))
+        display.fill((10, 10, 10))
         if screen == "menu":
             menu.render(100, 100)
 
+        frame_tex = surf_to_texture(display)
+        frame_tex.use(0)
+        program['tex'] = 0
+        render_object.render(mode=moderngl.TRIANGLE_STRIP)
+        if settings["bloom"]:
+            bloom["threshold"] = 0.0
+            bloom["bloomIntensity"] = 0.8
+            bloom["blurRadius"] = 5.0
+            render_bloom.render(mode=moderngl.TRIANGLE_STRIP)
+
         pygame.display.flip()
+        frame_tex.release()
         clock.tick(60)
 
     pygame.quit()

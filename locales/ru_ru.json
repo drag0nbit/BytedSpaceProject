@@ -3,6 +3,17 @@
   "game.name": "Byted Space Project",
   "menu.play": "Играть",
   "menu.options": "Настройки",
+  "menu.options.music": "Музыка",
+  "menu.options.sounds": "Звуки",
+  "menu.options.language": "Язык",
+  "menu.options.fps": "FPS",
+  "menu.options.bloom": "Свечение",
+  "menu.options.chromatic_aberration": "Хроматическая аберрация",
+  "menu.options.anti_aliasing": "Сглаживание",
+  "menu.options.other_distortion_effects": "Другие искажающие эффекты",
+  "menu.options.screen_shake": "Тряска экрана",
   "menu.quit": "Выйти",
-  "menu.back": "Назад"
+  "menu.back": "Назад",
+  "menu.enabled": "Включено",
+  "menu.disabled": "Выключено"
 }

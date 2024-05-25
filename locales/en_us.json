@@ -1,4 +1,19 @@
 {
   "__name__": "English",
-  "test": "Test"
+  "game.name": "Byted Space Project",
+  "menu.play": "Play",
+  "menu.options": "Settings",
+  "menu.options.music": "Music",
+  "menu.options.sounds": "Sounds",
+  "menu.options.language": "Language",
+  "menu.options.fps": "FPS",
+  "menu.options.bloom": "Bloom",
+  "menu.options.chromatic_aberration": "Chromatic aberration",
+  "menu.options.anti_aliasing": "Anti-Aliasing",
+  "menu.options.other_distortion_effects": "Other distortion effects",
+  "menu.options.screen_shake": "Screen shake",
+  "menu.quit": "Quit",
+  "menu.back": "Back",
+  "menu.enabled": "Enabled",
+  "menu.disabled": "Disabled"
 }

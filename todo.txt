@@ -5,13 +5,13 @@ Done:
 In progress
 -
 
-Todo:
+To do:
 - Modifiers (good, bad and unstable)
 - Main menu
 - Connecting to server
 - Logining via website using discord
 
-try: modernGL
+
 
 
 
